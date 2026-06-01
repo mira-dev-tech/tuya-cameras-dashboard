@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mira-cameras
+  labels:
+    app.kubernetes.io/part-of: kuberts
+    app.kubernetes.io/name: mira-cameras

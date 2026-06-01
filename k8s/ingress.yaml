@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mira-cameras
+  namespace: mira-cameras
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: cameras.mira-dev.tech
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mira-cameras
+                port:
+                  number: 8080
+  tls:
+    - hosts:
+        - cameras.mira-dev.tech
+      secretName: cameras-mira-dev-tech-tls
