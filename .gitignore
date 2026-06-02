@@ -1,0 +1,23 @@
+# Binaries
+/tuya-cameras-dashboard
+
+# Go
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Secrets & local session data (never commit)
+.data/
+sessions.json
+.env
+.env.*
+*.pem
+*.key
+kubeconfig*
+*.local

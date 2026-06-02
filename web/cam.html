@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="i18n-title" content="camTitle">
+  <title>Camera</title>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+    canvas { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .wait {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      color: #64748b; font: 0.65rem system-ui, sans-serif; flex-direction: column; gap: 0.4rem;
+    }
+    .engine {
+      position: fixed; top: 0; left: 0; width: 1280px; height: 720px;
+      opacity: 0.01; pointer-events: none; border: 0; z-index: 0;
+    }
+    .lang-bar {
+      position: fixed; top: 0.35rem; right: 0.35rem; z-index: 10;
+    }
+    .lang-select {
+      border: 0; background: rgba(255,255,255,0.08); color: #94a3b8;
+      font-size: 0.65rem; font-weight: 600; padding: 0.25rem 0.35rem;
+      border-radius: 6px; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="lang-bar">
+    <select id="langSelect" class="lang-select" aria-label="Language">
+      <option value="en">EN</option>
+      <option value="pt">PT</option>
+      <option value="es">ES</option>
+    </select>
+  </div>
+  <div class="wait" id="wait">
+    <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+    <span id="status" data-i18n="camConnecting">Connecting…</span>
+  </div>
+  <canvas id="out" aria-hidden="true"></canvas>
+  <iframe class="engine" id="engine" title="IPC player" src="about:blank"></iframe>
+  <script src="/i18n.js"></script>
+  <script src="/cam.js?v=18"></script>
+</body>
+</html>

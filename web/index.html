@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mira Cameras — IPC Terminal</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/site.css" rel="stylesheet">
+  <style>
+    body { background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+    .card { background: #1e293b; border: 1px solid #334155; }
+    .qr-box { background: #fff; border-radius: 12px; padding: 12px; display: inline-block; }
+    .qr-box img { width: 220px; height: 220px; }
+    .badge-region { background: #334155; }
+    .device-row { border-bottom: 1px solid #334155; }
+    .device-row:last-child { border-bottom: 0; }
+    .muted { color: #94a3b8; }
+    .lang-select {
+      border: 1px solid #334155; background: #1e293b; color: #94a3b8;
+      font-size: 0.75rem; padding: 0.2rem 0.4rem; border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-dark border-bottom border-secondary mb-4">
+    <div class="container d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <div class="d-flex align-items-center gap-2">
+        <span class="navbar-brand mb-0 h1" data-i18n="brand">Mira Cameras</span>
+        <span class="badge badge-region" id="regionBadge">—</span>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <select id="langSelect" class="lang-select" aria-label="Language">
+          <option value="en">EN</option>
+          <option value="pt">PT</option>
+          <option value="es">ES</option>
+        </select>
+        <a href="https://github.com/mira-dev-tech/tuya-cameras-dashboard" class="btn btn-outline-light btn-sm btn-github" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container pb-5">
+    <div id="loginPanel" class="row justify-content-center">
+      <div class="col-lg-5">
+        <div class="card shadow">
+          <div class="card-body p-4 text-center">
+            <h2 class="h4 mb-1" data-i18n="loginTitle">IPC Terminal Login</h2>
+            <p class="muted small mb-3" data-i18n="loginScan">Scan with SmartLife / Tuya Smart</p>
+            <p class="mb-3"><a href="/wall.html" class="btn btn-warning btn-sm d-none" id="liveLink" data-i18n="loginOpenWall">Open camera wall</a></p>
+
+            <div class="mb-3">
+              <label for="regionSelect" class="form-label small muted" data-i18n="loginDataCenter">Data center</label>
+              <select id="regionSelect" class="form-select form-select-sm bg-dark text-light border-secondary">
+                <option value="us">Western America (protect-us)</option>
+                <option value="eu">Europe (protect-eu)</option>
+              </select>
+            </div>
+
+            <div class="qr-box mb-3" id="qrContainer">
+              <div class="spinner-border text-secondary" role="status"></div>
+            </div>
+
+            <p class="small muted mb-3" id="loginStatus" data-i18n="loginGenerating">Generating QR code…</p>
+            <button type="button" class="btn btn-outline-light btn-sm" id="refreshBtn" data-i18n="loginRefreshQr">Refresh QR</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="dashboardPanel" class="d-none">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+          <h2 class="h4 mb-0" id="helloLine">Hello, —</h2>
+          <p class="muted small mb-0" data-i18n="loginSessionOk">Authenticated on security-wisdom platform</p>
+        </div>
+        <button type="button" class="btn btn-outline-danger btn-sm" id="logoutBtn" data-i18n="logout">Log out</button>
+        <a href="/wall.html" class="btn btn-warning btn-sm ms-2" data-i18n="loginOpenWall">Open camera wall</a>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="card h-100">
+            <div class="card-header border-secondary" data-i18n="homesHeader">Homes / groups</div>
+            <div class="list-group list-group-flush" id="homeList"></div>
+          </div>
+        </div>
+        <div class="col-md-8">
+          <div class="card h-100">
+            <div class="card-header border-secondary d-flex justify-content-between align-items-center">
+              <span data-i18n="devicesHeader">Devices</span>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" id="camerasOnly" checked>
+                <label class="form-check-label small" for="camerasOnly" data-i18n="camerasOnly">Cameras only</label>
+              </div>
+            </div>
+            <div class="card-body p-0" id="deviceList">
+              <p class="p-3 muted small mb-0" data-i18n="selectHome">Select a home on the left</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <span>Built by <a href="https://mira-dev.tech" target="_blank" rel="noopener noreferrer">Mirá Dev</a></span>
+    <span aria-hidden="true">·</span>
+    <a href="https://cameras.mira-dev.tech">Live demo</a>
+    <span aria-hidden="true">·</span>
+    <a href="https://github.com/mira-dev-tech/tuya-cameras-dashboard" target="_blank" rel="noopener noreferrer">Source code</a>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/i18n.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

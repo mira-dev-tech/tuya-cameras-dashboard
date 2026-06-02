@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="i18n-title" content="wallTitle">
+  <title>Mira Cameras — Wall</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/site.css" rel="stylesheet">
+  <style>
+    :root {
+      --bar-h: 40px;
+      --wall-cols: 3;
+      --wall-rows: 3;
+      --gap: 3px;
+      --radius: 4px;
+    }
+    * { box-sizing: border-box; }
+    html, body.wall-page {
+      margin: 0; height: 100%; overflow: hidden;
+      background: #000; color: #e2e8f0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    .wall-bar {
+      height: var(--bar-h); padding: 0 0.65rem;
+      display: flex; align-items: center; gap: 0.5rem;
+      background: rgba(8, 12, 20, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      z-index: 30; position: relative;
+    }
+    .wall-bar .brand {
+      font-weight: 600; font-size: 0.82rem; letter-spacing: -0.02em;
+      color: #f8fafc; text-decoration: none; white-space: nowrap;
+    }
+    .wall-bar .brand:hover { color: #fff; }
+    .chip {
+      font-size: 0.68rem; font-weight: 500; line-height: 1;
+      padding: 0.28rem 0.5rem; border-radius: 999px;
+      background: rgba(255,255,255,0.06); color: #94a3b8;
+      white-space: nowrap;
+    }
+    .chip.live { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+    .chip.live::before {
+      content: ""; display: inline-block; width: 6px; height: 6px;
+      border-radius: 50%; background: #4ade80; margin-right: 0.35rem;
+      box-shadow: 0 0 6px #4ade80; animation: pulse 2s ease infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+    .chip.mute { color: #64748b; }
+    .bar-status {
+      font-size: 0.65rem; color: #64748b; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; max-width: 22vw;
+    }
+    .bar-spacer { flex: 1; min-width: 0.25rem; }
+    .lang-select {
+      border: 0; background: rgba(255,255,255,0.06); color: #94a3b8;
+      font-size: 0.65rem; font-weight: 600; padding: 0.25rem 0.35rem;
+      border-radius: 6px; cursor: pointer;
+    }
+    .lang-select:hover { color: #e2e8f0; }
+    .layout-pills {
+      display: inline-flex; padding: 2px; gap: 2px;
+      background: rgba(255,255,255,0.05); border-radius: 8px;
+    }
+    .layout-pills button {
+      border: 0; background: transparent; color: #64748b;
+      font-size: 0.68rem; font-weight: 600; min-width: 2rem;
+      padding: 0.25rem 0.45rem; border-radius: 6px; cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .layout-pills button:hover { color: #cbd5e1; background: rgba(255,255,255,0.06); }
+    .layout-pills button.active { background: #fbbf24; color: #0f172a; }
+    .bar-actions { display: flex; align-items: center; gap: 0.25rem; }
+    .bar-btn {
+      border: 0; background: transparent; color: #64748b;
+      font-size: 0.68rem; padding: 0.3rem 0.45rem; border-radius: 6px;
+      cursor: pointer; text-decoration: none; white-space: nowrap;
+      transition: color 0.15s, background 0.15s;
+    }
+    .bar-btn:hover { color: #e2e8f0; background: rgba(255,255,255,0.06); }
+    .bar-btn.danger:hover { color: #fca5a5; background: rgba(239,68,68,0.12); }
+    .bar-btn.accent { color: #fbbf24; }
+    .wall-stage {
+      height: calc(100vh - var(--bar-h));
+      padding: var(--gap); background: #000;
+    }
+    .wall-grid {
+      display: grid; width: 100%; height: 100%;
+      grid-template-columns: repeat(var(--wall-cols), 1fr);
+      grid-template-rows: repeat(var(--wall-rows), 1fr);
+      gap: var(--gap);
+    }
+    .tile {
+      position: relative; min-height: 0; min-width: 0;
+      background: #0a0a0a; border-radius: var(--radius); overflow: hidden;
+    }
+    .tile.hidden-page { display: none; }
+    .tile.live { box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.35); }
+    .tile canvas {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+      background: #000; position: absolute; inset: 0; z-index: 1;
+    }
+    .tile-meta {
+      position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
+      padding: 1.5rem 0.4rem 0.35rem;
+      background: linear-gradient(transparent, rgba(0,0,0,0.75));
+      font-size: 0.62rem; line-height: 1.2; pointer-events: none;
+      opacity: 0.85;
+    }
+    .tile-meta .home { display: none; }
+    .tile-meta .dev { color: #f1f5f9; font-weight: 500; }
+    .tile-badge {
+      position: absolute; top: 0.3rem; right: 0.3rem; z-index: 2;
+      font-size: 0.58rem; font-weight: 600; letter-spacing: 0.04em;
+      padding: 0.1rem 0.35rem; border-radius: 4px; text-transform: uppercase;
+      backdrop-filter: blur(6px);
+    }
+    .tile-badge.live { background: rgba(21, 128, 61, 0.75); color: #ecfdf5; }
+    .tile-badge.wait { background: rgba(0,0,0,0.5); color: #94a3b8; }
+    .tile-badge.err { background: rgba(127, 29, 29, 0.8); color: #fecaca; }
+    .tile-spinner {
+      position: absolute; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 0.3rem;
+      z-index: 0; color: #475569; font-size: 0.62rem;
+    }
+    .tile-spinner .spinner-border { width: 1.25rem; height: 1.25rem; border-width: 2px; }
+    .engines {
+      position: fixed; top: var(--bar-h); left: 0;
+      width: 1280px; min-height: 720px;
+      opacity: 0.02; pointer-events: auto; z-index: 1; overflow: hidden;
+    }
+    .engines iframe { width: 1280px; height: 720px; border: 0; display: block; }
+
+    /* ── Loading experience ── */
+    .wall-loading {
+      position: fixed; inset: var(--bar-h) 0 0 0; z-index: 20;
+      background: radial-gradient(ellipse 80% 60% at 50% 40%, rgba(15,23,42,0.95), #000);
+      display: flex; align-items: center; justify-content: center;
+      padding: 1rem;
+    }
+    .wall-loading.hidden { display: none; }
+    .load-shell {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 1.25rem; max-width: 420px; width: 100%; text-align: center;
+    }
+    .load-orbit {
+      position: relative; width: 140px; height: 140px;
+    }
+    .load-orbit-ring {
+      position: absolute; inset: 0; border-radius: 50%;
+      border: 2px solid rgba(251,191,36,0.15);
+      animation: orbitSpin 8s linear infinite;
+    }
+    .load-orbit-ring:nth-child(2) {
+      inset: 12px; border-color: rgba(251,191,36,0.25);
+      animation-direction: reverse; animation-duration: 5s;
+    }
+    .load-orbit-dot {
+      position: absolute; width: 8px; height: 8px; border-radius: 50%;
+      background: #fbbf24; box-shadow: 0 0 12px #fbbf24;
+      top: 50%; left: 50%; margin: -4px 0 0 -4px;
+      animation: orbitDot 3s ease-in-out infinite;
+    }
+    @keyframes orbitSpin { to { transform: rotate(360deg); } }
+    @keyframes orbitDot {
+      0%,100% { transform: translate(-52px, -28px) scale(1); opacity: 1; }
+      33% { transform: translate(48px, -20px) scale(1.2); opacity: 0.8; }
+      66% { transform: translate(0, 52px) scale(0.9); opacity: 0.6; }
+    }
+    .load-slots {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px;
+      width: 120px; position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .load-slot {
+      aspect-ratio: 1; border-radius: 3px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      position: relative; overflow: hidden;
+    }
+    .load-slot::after {
+      content: ""; position: absolute; inset: 0;
+      background: linear-gradient(105deg, transparent 40%, rgba(251,191,36,0.12) 50%, transparent 60%);
+      transform: translateX(-100%);
+      animation: slotShimmer 2.4s ease-in-out infinite;
+      animation-delay: var(--slot-delay, 0s);
+    }
+    .load-slot.active {
+      border-color: rgba(251,191,36,0.5);
+      box-shadow: 0 0 8px rgba(251,191,36,0.2);
+    }
+    @keyframes slotShimmer {
+      0% { transform: translateX(-100%); }
+      40%,100% { transform: translateX(100%); }
+    }
+    .load-title {
+      font-size: 1.05rem; font-weight: 600; color: #f8fafc;
+      letter-spacing: -0.02em; margin: 0;
+    }
+    .load-sub {
+      font-size: 0.78rem; color: #94a3b8; line-height: 1.45; margin: 0;
+    }
+    .load-eta {
+      font-size: 0.68rem; color: #fbbf24; font-weight: 500;
+      padding: 0.25rem 0.65rem; border-radius: 999px;
+      background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.2);
+    }
+    .load-bar-wrap {
+      width: 100%; height: 4px; border-radius: 999px;
+      background: rgba(255,255,255,0.08); overflow: hidden;
+    }
+    .load-bar-fill {
+      height: 100%; width: 0%; border-radius: 999px;
+      background: linear-gradient(90deg, #fbbf24, #4ade80);
+      transition: width 0.6s ease;
+    }
+    .load-connecting {
+      font-size: 0.72rem; color: #cbd5e1; min-height: 1.1em;
+    }
+    .load-steps { display: flex; flex-direction: column; gap: 0.25rem; width: 100%; }
+    .load-steps .step {
+      font-size: 0.72rem; color: #475569; text-align: left;
+      padding-left: 1rem; position: relative;
+    }
+    .load-steps .step::before {
+      content: "○"; position: absolute; left: 0; color: #334155;
+    }
+    .load-steps .step.active { color: #fbbf24; }
+    .load-steps .step.active::before { content: "◉"; color: #fbbf24; }
+    .load-steps .step.done { color: #4ade80; }
+    .load-steps .step.done::before { content: "✓"; color: #4ade80; }
+    .load-tip {
+      font-size: 0.68rem; color: #64748b; font-style: italic;
+      min-height: 2.4em; transition: opacity 0.4s;
+    }
+    .load-tip.fade { opacity: 0; }
+    @media (max-width: 640px) {
+      .bar-status { display: none; }
+      .layout-pills button { min-width: 1.65rem; padding: 0.25rem 0.3rem; }
+      .load-sub { font-size: 0.72rem; }
+    }
+  </style>
+</head>
+<body class="wall-page">
+  <header class="wall-bar">
+    <a class="brand" href="/" data-i18n="brand">Mira Cameras</a>
+    <span class="chip" id="totalStat">—</span>
+    <span class="chip live" id="liveStat">0 live</span>
+    <span class="chip mute" data-i18n="mute" data-i18n-title="muteTitle" title="All streams are muted">Muted</span>
+    <span class="bar-status d-none d-md-inline" id="rotateStat">—</span>
+    <span class="bar-spacer"></span>
+    <select id="langSelect" class="lang-select" aria-label="Language">
+      <option value="en">EN</option>
+      <option value="pt">PT</option>
+      <option value="es">ES</option>
+    </select>
+    <div class="layout-pills" role="group" aria-label="Grid">
+      <button type="button" data-layout="2">2</button>
+      <button type="button" data-layout="4">4</button>
+      <button type="button" data-layout="8">8</button>
+      <button type="button" data-layout="16">16</button>
+      <button type="button" class="active" data-layout="all">All</button>
+    </div>
+    <div class="bar-actions ms-1">
+      <button type="button" class="bar-btn accent" id="refreshBtn" data-i18n-title="refresh" title="Refresh">↻</button>
+      <a href="/" class="bar-btn" data-i18n="account">Account</a>
+      <a href="https://github.com/mira-dev-tech/tuya-cameras-dashboard" class="bar-btn" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <button type="button" class="bar-btn danger" id="logoutBtn" data-i18n="logout">Log out</button>
+    </div>
+  </header>
+
+  <div id="wallLoading" class="wall-loading" aria-live="polite">
+    <div class="load-shell">
+      <div class="load-orbit" aria-hidden="true">
+        <div class="load-orbit-ring"></div>
+        <div class="load-orbit-ring"></div>
+        <div class="load-orbit-dot"></div>
+        <div class="load-slots" id="loadSlots"></div>
+      </div>
+      <h2 class="load-title" data-i18n="loadTitle">Waking up your cameras</h2>
+      <p class="load-sub" data-i18n="loadSubtitle">Each camera connects one at a time…</p>
+      <span class="load-eta" id="loadEta"></span>
+      <div class="load-bar-wrap"><div class="load-bar-fill" id="loadBarFill"></div></div>
+      <p class="load-connecting" id="loadConnecting"></p>
+      <div class="load-steps">
+        <div class="step active" id="loadStep1" data-i18n="loadStep1">Checking session…</div>
+        <div class="step" id="loadStep2" data-i18n="loadStep2">Listing online cameras…</div>
+        <div class="step" id="loadStep3" data-i18n="loadStep3">Starting streams…</div>
+        <div class="step" id="loadStep4">0 / 0</div>
+      </div>
+      <p class="load-tip" id="loadTip"></p>
+    </div>
+  </div>
+
+  <main class="wall-stage" id="wallWrap">
+    <div class="wall-grid" id="wallGrid"></div>
+  </main>
+  <div class="engines" id="engines" aria-hidden="true"></div>
+
+  <script src="/i18n.js"></script>
+  <script src="/wall.js?v=18"></script>
+</body>
+</html>
