@@ -1,5 +1,7 @@
 package tuya
 
+import "sync"
+
 // CameraEntry is a camera device with home context.
 type CameraEntry struct {
 	DevID    string `json:"devId"`
@@ -31,41 +33,70 @@ func (c *Client) allCameras(onlineOnly bool) ([]CameraEntry, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(homes) == 0 {
+		return nil, nil
+	}
+
+	type homeBatch struct {
+		entries []CameraEntry
+		err     error
+	}
+	batches := make([]homeBatch, len(homes))
+	var wg sync.WaitGroup
+	for i, home := range homes {
+		wg.Add(1)
+		go func(idx int, h Home) {
+			defer wg.Done()
+			batches[idx].entries, batches[idx].err = c.camerasForHome(h, onlineOnly)
+		}(i, home)
+	}
+	wg.Wait()
+
 	out := make([]CameraEntry, 0)
-	for _, home := range homes {
-		if onlineOnly {
-			devices, err := c.OnlineCameraDevices(home.GID)
-			if err != nil {
-				return nil, err
-			}
-			for _, d := range devices {
-				out = append(out, CameraEntry{
-					DevID:    d.DeviceID,
-					Name:     d.DeviceName,
-					GID:      home.GID,
-					HomeName: home.Name,
-					BizType:  6,
-					Online:   true,
-				})
-			}
-			continue
+	for _, batch := range batches {
+		if batch.err != nil {
+			return nil, batch.err
 		}
-		devices, err := c.DeviceList(home.GID)
+		out = append(out, batch.entries...)
+	}
+	return out, nil
+}
+
+func (c *Client) camerasForHome(home Home, onlineOnly bool) ([]CameraEntry, error) {
+	if onlineOnly {
+		devices, err := c.OnlineCameraDevices(home.GID)
 		if err != nil {
 			return nil, err
 		}
+		out := make([]CameraEntry, 0, len(devices))
 		for _, d := range devices {
-			if !IsCamera(d) {
-				continue
-			}
 			out = append(out, CameraEntry{
-				DevID:    d.BizID,
+				DevID:    d.DeviceID,
+				Name:     d.DeviceName,
 				GID:      home.GID,
 				HomeName: home.Name,
-				RoomID:   d.RoomID,
-				BizType:  d.BizType,
+				BizType:  6,
+				Online:   true,
 			})
 		}
+		return out, nil
+	}
+	devices, err := c.DeviceList(home.GID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]CameraEntry, 0)
+	for _, d := range devices {
+		if !IsCamera(d) {
+			continue
+		}
+		out = append(out, CameraEntry{
+			DevID:    d.BizID,
+			GID:      home.GID,
+			HomeName: home.Name,
+			RoomID:   d.RoomID,
+			BizType:  d.BizType,
+		})
 	}
 	return out, nil
 }

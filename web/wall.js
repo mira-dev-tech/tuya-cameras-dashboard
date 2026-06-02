@@ -39,6 +39,42 @@ const ERR_RETRY_MS = 30000
 const MAX_RECONNECT_ATTEMPTS = 8
 const LAYOUT_STORAGE_KEY = 'mira_wall_layout'
 const VALID_PRESETS = new Set(['2', '4', '8', '16', 'all'])
+const TV_UA = /Web0S|webOS|Tizen|SMART-TV|SmartTV|GoogleTV|Android TV|CrKey|HbbTV/i
+
+function isTvContext() {
+  const params = new URLSearchParams(location.search)
+  if (params.get('tv') === '1') return true
+  if (TV_UA.test(navigator.userAgent || '')) return true
+  const wide = window.innerWidth >= 1280
+  const coarse = window.matchMedia('(hover: none) and (pointer: coarse)').matches
+  return wide && coarse
+}
+
+function initTvMode() {
+  if (!isTvContext()) return
+  document.documentElement.classList.add('tv-mode')
+  document.body.classList.add('tv-mode')
+}
+
+initTvMode()
+
+function syncViewport() {
+  const vv = window.visualViewport
+  const h = Math.round(vv?.height ?? window.innerHeight)
+  const w = Math.round(vv?.width ?? window.innerWidth)
+  document.documentElement.style.setProperty('--app-vh', `${h}px`)
+  document.documentElement.style.setProperty('--app-vw', `${w}px`)
+  const bar = document.querySelector('.wall-bar')
+  if (bar) {
+    document.documentElement.style.setProperty('--bar-h', `${bar.offsetHeight}px`)
+  }
+  if (cameraOrder.length || tiles.size) recalcLayout()
+}
+
+syncViewport()
+window.addEventListener('resize', syncViewport)
+window.visualViewport?.addEventListener('resize', syncViewport)
+window.visualViewport?.addEventListener('scroll', syncViewport)
 
 /** @type {Map<string, TileState>} */
 const tiles = new Map()
@@ -87,8 +123,21 @@ logoutBtn?.addEventListener('click', async () => {
   location.href = '/'
 })
 
-if (wallWrap) {
-  new ResizeObserver(() => recalcLayout()).observe(wallWrap)
+if (wallWrap && typeof ResizeObserver !== 'undefined') {
+  new ResizeObserver(() => {
+    syncViewport()
+    recalcLayout()
+  }).observe(wallWrap)
+} else {
+  window.addEventListener('resize', () => {
+    syncViewport()
+    recalcLayout()
+  })
+}
+
+const wallBar = document.querySelector('.wall-bar')
+if (wallBar && typeof ResizeObserver !== 'undefined') {
+  new ResizeObserver(() => syncViewport()).observe(wallBar)
 }
 
 function applyWallStrings() {
@@ -172,6 +221,38 @@ function updateLoadEta(n) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function fetchJson(url, options = {}, timeoutMs = 120000) {
+  let timer = null
+  let ctrl = null
+  if (typeof AbortController !== 'undefined') {
+    ctrl = new AbortController()
+    timer = setTimeout(() => ctrl.abort(), timeoutMs)
+  }
+  try {
+    const res = await fetch(url, {
+      credentials: 'same-origin',
+      ...options,
+      signal: ctrl ? ctrl.signal : undefined,
+    })
+    let data = {}
+    try {
+      data = await res.json()
+    } catch (_) {
+      data = {}
+    }
+    return { res, data }
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+function showWallError(message) {
+  hideLoading()
+  if (wallGrid) {
+    wallGrid.innerHTML = `<p class="p-3 text-warning wall-error" role="alert">${message}</p>`
+  }
 }
 
 function setLoadingStep(idx) {
@@ -426,8 +507,8 @@ function recalcLayout(options = {}) {
   const n = cameraOrder.length || tiles.size
   if (!n) return
 
-  const vw = wallWrap?.clientWidth || window.innerWidth
-  const vh = wallWrap?.clientHeight || window.innerHeight
+  const vw = wallWrap?.clientWidth || parseInt(getComputedStyle(document.documentElement).getPropertyValue('--app-vw'), 10) || window.innerWidth
+  const vh = wallWrap?.clientHeight || Math.max(0, (parseInt(getComputedStyle(document.documentElement).getPropertyValue('--app-vh'), 10) || window.innerHeight) - (wallBar?.offsetHeight || 40))
   const { cols, rows } = getGridDimensions(layoutPreset, n, vw, vh)
   gridCols = cols
   gridRows = rows
@@ -795,15 +876,25 @@ function stopHealthWatch() {
 }
 
 async function bootstrap(force = false) {
+  try {
+    await bootstrapInner(force)
+  } catch (err) {
+    const msg = err && err.name === 'AbortError'
+      ? t('loadFetchError', { msg: 'timeout' })
+      : t('loadFetchError', { msg: (err && err.message) || String(err) })
+    showWallError(msg)
+  }
+}
+
+async function bootstrapInner(force = false) {
   showLoading()
   setLoadingStep(0)
 
-  const statusRes = await fetch('/api/login/status')
+  const { res: statusRes, data: status } = await fetchJson('/api/login/status', {}, 30000)
   if (!statusRes.ok) {
     location.href = '/'
     return
   }
-  const status = await statusRes.json()
   if (status.state !== 'ready') {
     location.href = '/'
     return
@@ -824,33 +915,50 @@ async function bootstrap(force = false) {
     pageIndex = 0
   }
 
-  const res = await fetch('/api/cameras/all')
-  const data = await res.json()
-  if (!res.ok) {
-    hideLoading()
-    wallGrid.innerHTML = `<p class="p-3 text-warning">${data.message || t('errorGeneric')}</p>`
+  setLoadingStep(2)
+  if (loadConnecting) loadConnecting.textContent = t('loadStillListing')
+
+  let listingTimer = null
+  if (loadTip) {
+    listingTimer = setInterval(() => {
+      if (loadConnecting) loadConnecting.textContent = t('loadStillListing')
+    }, 8000)
+  }
+
+  let camerasRes
+  let camerasData
+  try {
+    const out = await fetchJson('/api/cameras/all', {}, 120000)
+    camerasRes = out.res
+    camerasData = out.data
+  } finally {
+    if (listingTimer) clearInterval(listingTimer)
+  }
+
+  if (!camerasRes.ok) {
+    showWallError(camerasData.message || t('loadFetchError', { msg: camerasRes.status }))
     return
   }
 
-  const cameras = data.cameras || []
+  const cameras = camerasData.cameras || []
   if (!cameras.length) {
     hideLoading()
     wallGrid.innerHTML = `<p class="p-3 text-secondary">${t('noCameras')}</p>`
     totalStat.textContent = t('onlineCount', { n: 0 })
+    liveStat.textContent = t('liveCount', { n: 0 })
     return
   }
 
   cameraOrder = cameras.map((c) => c.devId)
   cameras.forEach((c) => cameraMeta.set(c.devId, c))
 
-  setLoadingStep(2)
   totalStat.textContent = t('onlineCount', { n: cameras.length })
   connectTotal = cameras.length
   connectCurrent = 0
   updateLoadEta(cameras.length)
+  if (loadConnecting) loadConnecting.textContent = ''
 
   syncTiles(cameras)
-
   recalcLayout()
   setLoadingStep(3)
   let live = 0

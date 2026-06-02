@@ -116,14 +116,7 @@ func (s *Server) handleLoginStart(w http.ResponseWriter, r *http.Request) {
 
 	go s.pollLogin(sess.ID)
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookie,
-		Value:    sid,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   sessionMaxAge,
-	})
+	setSessionCookie(w, r, sid)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"sessionId": sid,
@@ -197,6 +190,7 @@ func (s *Server) handleAllCameras(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	includeOffline := r.URL.Query().Get("all") == "1"
+	start := time.Now()
 	var (
 		cameras []tuya.CameraEntry
 		err     error
@@ -207,9 +201,11 @@ func (s *Server) handleAllCameras(w http.ResponseWriter, r *http.Request) {
 		cameras, err = sess.Client.AllOnlineCameras()
 	}
 	if err != nil {
+		log.Printf("cameras/all error after %s: %v", time.Since(start).Round(time.Millisecond), err)
 		writeError(w, http.StatusBadGateway, "cameras_all", err.Error())
 		return
 	}
+	log.Printf("cameras/all ok: %d cameras in %s (online=%v)", len(cameras), time.Since(start).Round(time.Millisecond), !includeOffline)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"count":   len(cameras),
 		"online":  !includeOffline,
@@ -359,4 +355,17 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]string{"error": code, "message": message})
+}
+
+func setSessionCookie(w http.ResponseWriter, r *http.Request, sid string) {
+	secure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookie,
+		Value:    sid,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   sessionMaxAge,
+	})
 }
