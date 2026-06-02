@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build mira-cameras no nó OVH + import CRI + apply manifests + rollout.
+# Build tuya-cameras-dashboard on OVH node + CRI import + apply manifests + rollout.
 #
 # Uso:
 #   ./scripts/deploy-ovh.sh
@@ -13,8 +13,8 @@ info() { echo ">> $*"; }
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SSH_HOST="${MIRA_CAMERAS_SSH_HOST:?Set MIRA_CAMERAS_SSH_HOST to your Kubernetes build node (SSH alias or user@host)}"
 TAG="${1:-1.0.0}"
-IMAGE="mira-cameras:${TAG}"
-REMOTE_DIR="/home/ubuntu/mira-cameras-build"
+IMAGE="tuya-cameras-dashboard:${TAG}"
+REMOTE_DIR="/home/ubuntu/tuya-cameras-dashboard-build"
 K='sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml'
 CTR='sudo /var/lib/rancher/rke2/bin/ctr -a /run/k3s/containerd/containerd.sock -n k8s.io'
 
@@ -22,7 +22,7 @@ run_remote() {
   ssh "$SSH_HOST" "$@"
 }
 
-info "Sincronizar mira-cameras → ${SSH_HOST}:${REMOTE_DIR}…"
+info "Sync tuya-cameras-dashboard → ${SSH_HOST}:${REMOTE_DIR}…"
 ssh "$SSH_HOST" "mkdir -p ${REMOTE_DIR}"
 rsync -az --delete \
   --exclude .git \
@@ -41,7 +41,7 @@ for f in namespace.yaml deployment.yaml service.yaml ingress.yaml; do
   run_remote "${K} apply -f -" < "${ROOT}/k8s/${f}"
 done
 
-info "Rollout deployment mira-cameras…"
+info "Rollout deployment mira-cameras (image ${IMAGE})…"
 run_remote bash <<REMOTE
 set -euo pipefail
 K='sudo /var/lib/rancher/rke2/bin/kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml'

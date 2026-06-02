@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mira-dev-tech/mira-cameras/internal/tuya"
+	"github.com/mira-dev-tech/tuya-cameras-dashboard/internal/tuya"
 )
 
 type persistedFile struct {

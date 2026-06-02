@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/mira-dev-tech/mira-cameras/internal/store"
-	"github.com/mira-dev-tech/mira-cameras/internal/tuya"
+	"github.com/mira-dev-tech/tuya-cameras-dashboard/internal/store"
+	"github.com/mira-dev-tech/tuya-cameras-dashboard/internal/tuya"
 )
 
 var portalProxyCache sync.Map

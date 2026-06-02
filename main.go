@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/mira-dev-tech/mira-cameras/internal/api"
-	"github.com/mira-dev-tech/mira-cameras/internal/store"
+	"github.com/mira-dev-tech/tuya-cameras-dashboard/internal/api"
+	"github.com/mira-dev-tech/tuya-cameras-dashboard/internal/store"
 )
 
 //go:embed web/*
@@ -34,7 +34,7 @@ func main() {
 	mux.Handle("GET /{file}", fileServer)
 
 	addr := envOr("LISTEN_ADDR", ":8080")
-	log.Printf("mira-cameras listening on %s", addr)
+log.Printf("tuya-cameras-dashboard listening on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatal(err)
 	}

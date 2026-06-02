@@ -1,4 +1,4 @@
-# Mira Cameras
+# Tuya Cameras Dashboard
 
 **Live camera wall for the Tuya SmartLife IPC Terminal (security-wisdom platform).**
 
@@ -8,7 +8,7 @@
 
 Mira Cameras is a self-hosted web app that authenticates against Tuya's **new IPC Terminal** (`protect-*.ismartlife.me`), lists your homes and cameras, and exposes a **multi-camera live wall** through a same-origin proxy to Tuya's WebRTC player.
 
-Built by **[Mirá Dev](https://mira-dev.tech)** · Source: [github.com/mira-dev-tech/mira-cameras](https://github.com/mira-dev-tech/mira-cameras)
+Built by **[Mirá Dev](https://mira-dev.tech)** · Source: [github.com/mira-dev-tech/tuya-cameras-dashboard](https://github.com/mira-dev-tech/tuya-cameras-dashboard)
 
 ---
 
@@ -63,8 +63,8 @@ The legacy `ipc-*.ismartlife.me` portal is being retired (Tuya migration to secu
 **Requirements:** Go 1.22+
 
 ```bash
-git clone https://github.com/mira-dev-tech/mira-cameras.git
-cd mira-cameras
+git clone https://github.com/mira-dev-tech/tuya-cameras-dashboard.git
+cd tuya-cameras-dashboard
 
 go run .
 # open http://localhost:8080
@@ -79,8 +79,8 @@ LISTEN_ADDR=":8787" MIRA_CAMERAS_DATA=".data" go run .
 ### Docker
 
 ```bash
-docker build -t mira-cameras .
-docker run --rm -p 8080:8080 -v mira-cameras-data:/app/.data mira-cameras
+docker build -t tuya-cameras-dashboard .
+docker run --rm -p 8080:8080 -v tuya-cameras-data:/app/.data tuya-cameras-dashboard
 ```
 
 ## API reference
@@ -128,7 +128,7 @@ This project is designed for **public source release**:
 - **Self-hosted** — you control where session data is stored
 - **Do not commit** `sessions.json`, API keys, or production kubeconfig files
 
-Report security issues via [GitHub Security Advisories](https://github.com/mira-dev-tech/mira-cameras/security/advisories/new) (see [SECURITY.md](SECURITY.md)).
+Report security issues via [GitHub Security Advisories](https://github.com/mira-dev-tech/tuya-cameras-dashboard/security/advisories/new) (see [SECURITY.md](SECURITY.md)).
 
 ## Known limitations
 
