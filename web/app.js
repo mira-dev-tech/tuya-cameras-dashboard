@@ -88,6 +88,14 @@ async function startLogin() {
   startPolling()
 }
 
+function wallRedirectUrl() {
+  const params = new URLSearchParams(location.search)
+  if (params.get('tv') === '1') {
+    return '/wall.html?tv=1&layout=4&rotate=1'
+  }
+  return '/wall.html'
+}
+
 async function pollStatus() {
   const res = await fetch('/api/login/status')
   const data = await res.json()
@@ -100,7 +108,7 @@ async function pollStatus() {
 
   if (data.state === 'ready' && data.user) {
     stopPoll()
-    location.href = '/wall.html'
+    location.href = wallRedirectUrl()
     return
   }
 
@@ -176,7 +184,7 @@ async function bootstrap() {
   }
   const status = await statusRes.json()
   if (status.state === 'ready' && status.user) {
-    location.href = '/wall.html'
+    location.href = wallRedirectUrl()
     return
   }
   if (status.state === 'pending') {

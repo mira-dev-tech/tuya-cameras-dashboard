@@ -40,6 +40,9 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/devices", s.handleDevices)
 	mux.HandleFunc("GET /api/cameras/all", s.handleAllCameras)
 	mux.HandleFunc("GET /api/me", s.handleMe)
+	mux.HandleFunc("GET /tv", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/tv.html", http.StatusTemporaryRedirect)
+	})
 	mux.Handle("/portal/", http.HandlerFunc(s.handlePortalProxy))
 	mux.HandleFunc("GET /portal", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/portal/playback", http.StatusTemporaryRedirect)
