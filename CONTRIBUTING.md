@@ -55,4 +55,4 @@ Session data is written to `.data/` (gitignored). Never commit this directory.
 
 ## Questions
 
-Open a [GitHub Discussion](https://github.com/Rbertolli/mira-cameras/discussions) or issue if you are unsure whether a change fits the project scope.
+Open a [GitHub Discussion](https://github.com/mira-dev-tech/mira-cameras/discussions) or issue if you are unsure whether a change fits the project scope.

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Rbertolli/mira-cameras/internal/tuya"
+	"github.com/mira-dev-tech/mira-cameras/internal/tuya"
 )
 
 func main() {
