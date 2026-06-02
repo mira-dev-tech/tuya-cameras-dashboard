@@ -10,7 +10,7 @@
 
 **Please do not open public GitHub issues for security vulnerabilities.**
 
-Use [GitHub Security Advisories](https://github.com/Rbertolli/mira-cameras/security/advisories/new) to report privately.
+Use [GitHub Security Advisories](https://github.com/mira-dev-tech/mira-cameras/security/advisories/new) to report privately.
 
 Include:
 

@@ -8,7 +8,7 @@
 
 Mira Cameras is a self-hosted web app that authenticates against Tuya's **new IPC Terminal** (`protect-*.ismartlife.me`), lists your homes and cameras, and exposes a **multi-camera live wall** through a same-origin proxy to Tuya's WebRTC player.
 
-Built by **[Mirá Dev](https://mira-dev.tech)** · Source: [github.com/Rbertolli/mira-cameras](https://github.com/Rbertolli/mira-cameras)
+Built by **[Mirá Dev](https://mira-dev.tech)** · Source: [github.com/mira-dev-tech/mira-cameras](https://github.com/mira-dev-tech/mira-cameras)
 
 ---
 
@@ -63,7 +63,7 @@ The legacy `ipc-*.ismartlife.me` portal is being retired (Tuya migration to secu
 **Requirements:** Go 1.22+
 
 ```bash
-git clone https://github.com/Rbertolli/mira-cameras.git
+git clone https://github.com/mira-dev-tech/mira-cameras.git
 cd mira-cameras
 
 go run .
@@ -128,7 +128,7 @@ This project is designed for **public source release**:
 - **Self-hosted** — you control where session data is stored
 - **Do not commit** `sessions.json`, API keys, or production kubeconfig files
 
-Report security issues via [GitHub Security Advisories](https://github.com/Rbertolli/mira-cameras/security/advisories/new) (see [SECURITY.md](SECURITY.md)).
+Report security issues via [GitHub Security Advisories](https://github.com/mira-dev-tech/mira-cameras/security/advisories/new) (see [SECURITY.md](SECURITY.md)).
 
 ## Known limitations
 

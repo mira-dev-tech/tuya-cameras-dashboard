@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/Rbertolli/mira-cameras/internal/api"
-	"github.com/Rbertolli/mira-cameras/internal/store"
+	"github.com/mira-dev-tech/mira-cameras/internal/api"
+	"github.com/mira-dev-tech/mira-cameras/internal/store"
 )
 
 //go:embed web/*

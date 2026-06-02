@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Rbertolli/mira-cameras/internal/store"
-	"github.com/Rbertolli/mira-cameras/internal/tuya"
+	"github.com/mira-dev-tech/mira-cameras/internal/store"
+	"github.com/mira-dev-tech/mira-cameras/internal/tuya"
 )
 
 const (
