@@ -15,8 +15,9 @@ spec:
       labels:
         app: mira-cameras
     spec:
-      nodeSelector:
-        kubernetes.io/hostname: komputera01
+      # Optional: pin to a single-node cluster (uncomment and set your node name)
+      # nodeSelector:
+      #   kubernetes.io/hostname: your-node-hostname
       containers:
         - name: mira-cameras
           image: mira-cameras:1.0.0

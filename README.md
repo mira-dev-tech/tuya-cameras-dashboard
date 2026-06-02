@@ -1,65 +1,166 @@
 # Mira Cameras
 
-Proxy web para login QR e listagem de câmeras na **nova plataforma IPC Terminal** (Tuya `security-wisdom`).
+**Live camera wall for the Tuya SmartLife IPC Terminal (security-wisdom platform).**
 
-Hospedagem: **https://cameras.mira-dev.tech**
+[![Live demo](https://img.shields.io/badge/demo-cameras.mira--dev.tech-orange?style=for-the-badge)](https://cameras.mira-dev.tech)
 
-## Plataforma upstream
+> **Try it:** [https://cameras.mira-dev.tech](https://cameras.mira-dev.tech) — scan the QR code with the SmartLife / Tuya Smart app (same account as your cameras).
 
-| Região | Host |
-|--------|------|
-| US (default) | `https://protect-us.ismartlife.me` |
-| EU | `https://protect-eu.ismartlife.me` |
+Mira Cameras is a self-hosted web app that authenticates against Tuya's **new IPC Terminal** (`protect-*.ismartlife.me`), lists your homes and cameras, and exposes a **multi-camera live wall** through a same-origin proxy to Tuya's WebRTC player.
 
-Substitui o portal legado `ipc-*.ismartlife.me` (descontinua em 30/06/2026).
+Built by **[Mirá Dev](https://mira-dev.tech)** · Source: [github.com/Rbertolli/mira-cameras](https://github.com/Rbertolli/mira-cameras)
 
-### Fluxo de login
+---
+
+## Features
+
+| Feature | Description |
+|---------|-------------|
+| **QR login** | No password stored — authenticate once via SmartLife/Tuya Smart mobile app |
+| **Multi-home** | Lists cameras across all homes linked to your account |
+| **Online filter** | Wall shows **online** cameras by default (`roomList` API) |
+| **Live wall** | Grid UI with per-tile status, loading steps, and stream mirroring |
+| **IPC proxy** | Same-origin `/portal/*` proxy so the official Tuya player runs under your domain |
+| **Session persistence** | Cookie `mira_cam_sid` + optional disk store (`MIRA_CAMERAS_DATA`) |
+| **Logout** | Clears local session via `POST /api/logout` |
+
+## Screenshots & pages
+
+| URL | Purpose |
+|-----|---------|
+| `/` | QR login + device browser |
+| `/wall.html` | Multi-camera live wall (primary UI) |
+| `/live.html` | Single IPC player with sidebar and auto-reconnect |
+
+## Architecture
+
+```text
+Browser
+  ├── Static UI (embedded `web/`)
+  ├── REST API (`/api/*`)     → Go server → Tuya IPC Terminal API
+  └── Portal proxy (`/portal/*`) → upstream protect-{us|eu}.ismartlife.me
+        └── WebRTC player (Tuya OS_IPC_WEB + WASM) — proprietary stack
+```
+
+Login flow (mirrors the official portal):
 
 1. `POST /api/login/security/QCtoken`
-2. `POST /api/login/exchange` com `tuyaSmart--qrLogin?token=…`
-3. Poll `POST /api/login/poll` a cada 3 s até o app confirmar
-4. Sessão upstream via cookies `uid` + `clientId`
+2. `POST /api/login/exchange` with `tuyaSmart--qrLogin?token=…`
+3. Poll `POST /api/login/poll` every ~3s until the mobile app confirms
+4. Upstream session cookies (`uid`, `clientId`) are stored server-side only
 
-## API local
+## Upstream platform
 
-| Método | Path | Descrição |
-|--------|------|-----------|
-| GET | `/healthz` | Health check |
-| GET | `/api/regions` | Regiões disponíveis |
-| POST | `/api/login/start` | Gera QR (`{"region":"us"}`) |
-| GET | `/api/login/status` | Estado da sessão |
-| POST | `/api/logout` | Encerra sessão |
-| GET | `/api/homes` | Lista casas (requer login) |
-| GET | `/api/devices?gid=…&cameras=1` | Dispositivos da casa |
+| Region | Host | Default |
+|--------|------|---------|
+| US | `https://protect-us.ismartlife.me` | yes |
+| EU | `https://protect-eu.ismartlife.me` | |
 
-Cookie de sessão: `mira_cam_sid` (HttpOnly).
+The legacy `ipc-*.ismartlife.me` portal is being retired (Tuya migration to security-wisdom).
 
-## Desenvolvimento local
+## Quick start (local)
+
+**Requirements:** Go 1.22+
 
 ```bash
+git clone https://github.com/Rbertolli/mira-cameras.git
+cd mira-cameras
+
 go run .
-# http://localhost:8080
+# open http://localhost:8080
 ```
 
-## Deploy (komputera01)
+Custom listen address and data directory:
 
 ```bash
-chmod +x scripts/deploy-ovh.sh
-./scripts/deploy-ovh.sh 1.0.0
+LISTEN_ADDR=":8787" MIRA_CAMERAS_DATA=".data" go run .
 ```
 
-## DNS
+### Docker
 
-Criar registo **A** `cameras.mira-dev.tech` → `144.217.79.138` na Cloudflare (proxied).
+```bash
+docker build -t mira-cameras .
+docker run --rm -p 8080:8080 -v mira-cameras-data:/app/.data mira-cameras
+```
 
-TLS via cert-manager (`letsencrypt-prod`).
+## API reference
 
-## Limitações v1
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/healthz` | no | Health check |
+| `GET` | `/api/regions` | no | Available data centers |
+| `POST` | `/api/login/start` | no | Start QR login (`{"region":"us"}`) |
+| `GET` | `/api/login/status` | cookie | Session state |
+| `POST` | `/api/logout` | cookie | End session |
+| `GET` | `/api/homes` | yes | List homes |
+| `GET` | `/api/cameras/all` | yes | Online cameras (all homes) |
+| `GET` | `/api/cameras/all?all=1` | yes | Include offline devices |
+| `GET` | `/portal/*` | yes | Authenticated reverse proxy to IPC Terminal |
 
-- Sessões em memória (reinício do pod = novo login)
-- Nomes das câmeras vêm via MQTT no portal original; aqui listamos `bizId` + `bizType`
-- Streaming de vídeo não implementado
+Session cookie: **`mira_cam_sid`** (HttpOnly, 30-day max-age; actual validity depends on Tuya upstream).
 
-## Repositório
+## Environment variables
 
-Infra Kuberts: [`cluster-kuberts`](https://github.com/mira-dev/cluster-kuberts) — este repo é independente.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LISTEN_ADDR` | `:8080` | HTTP listen address |
+| `MIRA_CAMERAS_DATA` | `.data` | Directory for persisted sessions (`sessions.json`) |
+
+## Kubernetes (optional)
+
+Example manifests are in [`k8s/`](k8s/). Adjust `nodeSelector`, ingress host, and image tag for your cluster.
+
+```bash
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
+kubectl apply -f k8s/ingress.yaml
+```
+
+For a single-node workflow (build on the node + import to containerd), see [`scripts/deploy-ovh.sh`](scripts/deploy-ovh.sh). **Set `MIRA_CAMERAS_SSH_HOST`** to your build host — no internal hostnames are hard-coded.
+
+## Security & privacy
+
+This project is designed for **public source release**:
+
+- **No secrets in git** — `.data/`, `.env`, and session files are gitignored
+- **No credentials in the UI** — login is QR-only; upstream cookies never reach the browser
+- **Self-hosted** — you control where session data is stored
+- **Do not commit** `sessions.json`, API keys, or production kubeconfig files
+
+Report security issues via [GitHub Security Advisories](https://github.com/Rbertolli/mira-cameras/security/advisories/new) (see [SECURITY.md](SECURITY.md)).
+
+## Known limitations
+
+- **Tuya WebRTC is proprietary** — live video uses the official portal player via proxy, not a custom RTSP/HLS pipeline
+- **Official portal grid** — Tuya's UI shows up to **4 simultaneous feeds per home** (2×2)
+- **Multi-camera wall** — experimental; spawning many portal instances is CPU/network intensive
+- **Session lifetime** — pod restart clears in-memory state unless `MIRA_CAMERAS_DATA` is on a persistent volume
+- **Not affiliated with Tuya** — unofficial integration; subject to upstream API changes
+
+## Contributing
+
+We welcome improvements, but **all changes must be reviewed and approved by maintainers before merge**.
+
+1. Read [CONTRIBUTING.md](CONTRIBUTING.md)
+2. Open an issue to discuss larger changes
+3. Fork → branch → pull request
+4. Wait for maintainer review — do not merge your own PR
+
+Direct pushes to `main` are reserved for maintainers.
+
+## License
+
+Copyright © [Mirá Dev](https://mira-dev.tech). All rights reserved unless a license file is added by the maintainers.
+
+## Related projects
+
+- [cluster-kuberts](https://github.com/mira-dev/cluster-kuberts) — Kubernetes infrastructure (separate repo)
+
+---
+
+**Suggested GitHub repository description:**
+
+```text
+Live multi-camera wall for Tuya SmartLife IPC Terminal (QR login, WebRTC proxy). Demo: https://cameras.mira-dev.tech
+```

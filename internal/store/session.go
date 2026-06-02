@@ -19,19 +19,27 @@ const (
 
 // Session holds upstream Tuya client state for one browser user.
 type Session struct {
-	ID        string
-	Region    string
-	Client    *tuya.Client
-	QRToken   string
-	QRImage   string
-	State     LoginState
-	Error     string
-	User      map[string]any
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID            string
+	Region        string
+	Client        *tuya.Client
+	QRToken       string
+	QRImage       string
+	State         LoginState
+	Error         string
+	User          map[string]any
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	AuthCheckedAt time.Time
 }
 
-// MemoryStore is an in-process session registry.
+// Store persists authenticated Tuya sessions.
+type Store interface {
+	Put(sess *Session)
+	Get(id string) (*Session, bool)
+	Delete(id string)
+}
+
+// MemoryStore is an in-process session registry (tests / fallback).
 type MemoryStore struct {
 	mu       sync.RWMutex
 	sessions map[string]*Session

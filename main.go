@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/Rbertolli/mira-cameras/internal/api"
 	"github.com/Rbertolli/mira-cameras/internal/store"
@@ -16,7 +15,11 @@ import (
 var webFS embed.FS
 
 func main() {
-	st := store.NewMemoryStore(24 * time.Hour)
+	dataDir := envOr("MIRA_CAMERAS_DATA", ".data")
+	st, err := store.NewFileStore(dataDir)
+	if err != nil {
+		log.Fatalf("session store: %v", err)
+	}
 	srv := api.NewServer(st)
 
 	mux := http.NewServeMux()

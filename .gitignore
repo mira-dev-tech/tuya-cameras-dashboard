@@ -11,3 +11,13 @@ vendor/
 
 # OS
 .DS_Store
+
+# Secrets & local session data (never commit)
+.data/
+sessions.json
+.env
+.env.*
+*.pem
+*.key
+kubeconfig*
+*.local

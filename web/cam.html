@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Câmera</title>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+    canvas { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .wait {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      color: #64748b; font: 0.65rem system-ui, sans-serif; flex-direction: column; gap: 0.4rem;
+    }
+    .engine {
+      position: fixed; top: 0; left: 0; width: 1280px; height: 720px;
+      opacity: 0.01; pointer-events: none; border: 0; z-index: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="wait" id="wait">
+    <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+    <span id="status">Conectando…</span>
+  </div>
+  <canvas id="out" aria-hidden="true"></canvas>
+  <iframe class="engine" id="engine" title="IPC player" src="about:blank"></iframe>
+  <script src="/cam.js?v=3"></script>
+</body>
+</html>

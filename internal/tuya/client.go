@@ -103,23 +103,73 @@ func (c *Client) QRExchange(token string) (string, error) {
 	return img, nil
 }
 
+// PollSession is returned when the mobile app confirms QR login.
+type PollSession struct {
+	SID      string `json:"sid"`
+	UID      string `json:"uid"`
+	ClientID string `json:"clientId"`
+	Nickname string `json:"nickname"`
+	Username string `json:"username"`
+}
+
 // PollLogin checks whether the mobile app confirmed the QR scan.
-func (c *Client) PollLogin(token string) (bool, error) {
+// Pending polls return (nil, nil). Confirmed login sets upstream session cookies.
+func (c *Client) PollLogin(token string) (*PollSession, error) {
 	body := map[string]string{"token": token}
 	var out APIResponse
 	if err := c.postJSON("/api/login/poll", body, &out); err != nil {
-		return false, err
+		return nil, err
 	}
-	if out.Success {
-		return true, nil
+	if !out.Success {
+		if out.ErrorCode != "" && strings.Contains(strings.ToUpper(out.ErrorCode), "EXPIRE") {
+			return nil, fmt.Errorf("%s: %s", out.ErrorCode, out.ErrorMsg)
+		}
+		return nil, nil
 	}
-	if out.ErrorCode != "" && !strings.EqualFold(out.ErrorCode, "PENDING") {
-		// Still waiting or expired — treat non-fatal codes as pending.
-		if strings.Contains(strings.ToUpper(out.ErrorCode), "EXPIRE") {
-			return false, fmt.Errorf("%s: %s", out.ErrorCode, out.ErrorMsg)
+	if len(out.Result) == 0 {
+		return nil, nil
+	}
+
+	var pending bool
+	if err := json.Unmarshal(out.Result, &pending); err == nil {
+		return nil, nil
+	}
+
+	var sess PollSession
+	if err := json.Unmarshal(out.Result, &sess); err != nil {
+		return nil, nil
+	}
+	if sess.SID == "" || sess.UID == "" {
+		return nil, nil
+	}
+
+	c.setSessionCookies(sess.UID, sess.ClientID)
+	return &sess, nil
+}
+
+func (c *Client) setSessionCookies(uid, clientID string) {
+	u, err := url.Parse(c.baseURL)
+	if err != nil {
+		return
+	}
+	c.httpClient.Jar.SetCookies(u, []*http.Cookie{
+		{Name: "uid", Value: uid, Path: "/"},
+		{Name: "clientId", Value: clientID, Path: "/"},
+	})
+}
+
+func (c *Client) HasAuthCookies() bool {
+	u, err := url.Parse(c.baseURL)
+	if err != nil {
+		return false
+	}
+	hasUID := false
+	for _, ck := range c.httpClient.Jar.Cookies(u) {
+		if ck.Name == "uid" && ck.Value != "" {
+			hasUID = true
 		}
 	}
-	return false, nil
+	return hasUID
 }
 
 // UserInfo returns the logged-in user profile.
@@ -213,6 +263,11 @@ func (c *Client) CookieHeader() string {
 }
 
 func (c *Client) postJSON(path string, body any, out *APIResponse) error {
+	return c.PostJSON(path, body, out)
+}
+
+// PostJSON calls an upstream IPC Terminal API with session cookies.
+func (c *Client) PostJSON(path string, body any, out *APIResponse) error {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return err

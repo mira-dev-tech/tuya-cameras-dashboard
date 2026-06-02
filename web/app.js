@@ -45,6 +45,18 @@ function showDashboard(user) {
   loginPanel.classList.add('d-none')
   dashboardPanel.classList.remove('d-none')
   userName.textContent = user?.nickname || user?.userName || 'usuário'
+  document.getElementById('liveLink')?.classList.remove('d-none')
+}
+
+function showQR(qrImage) {
+  if (!qrImage) return
+  qrContainer.innerHTML = `<img src="${qrImage}" alt="QR code login">`
+  loginStatus.textContent = 'Escaneie o QR no app SmartLife — permanece até confirmar no celular'
+}
+
+function startPolling() {
+  stopPoll()
+  pollTimer = setInterval(() => pollStatus(), 3000)
 }
 
 async function startLogin() {
@@ -66,10 +78,8 @@ async function startLogin() {
     return
   }
 
-  qrContainer.innerHTML = `<img src="${data.qrImage}" alt="QR code login">`
-  loginStatus.textContent = 'Escaneie o QR no app SmartLife…'
-
-  pollTimer = setInterval(() => pollStatus(), 2500)
+  showQR(data.qrImage)
+  startPolling()
 }
 
 async function pollStatus() {
@@ -77,14 +87,20 @@ async function pollStatus() {
   const data = await res.json()
   if (!res.ok) return
 
-  if (data.state === 'ready') {
-    stopPoll()
-    showDashboard(data.user)
-    await loadHomes()
+  if (data.state === 'pending') {
+    if (data.qrImage) showQR(data.qrImage)
     return
   }
+
+  if (data.state === 'ready' && data.user) {
+    stopPoll()
+    location.href = '/wall.html'
+    return
+  }
+
   if (data.state === 'expired' || data.state === 'error') {
     stopPoll()
+    if (data.qrImage) showQR(data.qrImage)
     loginStatus.textContent = data.error || 'QR expirou — clique em Atualizar'
   }
 }
@@ -147,16 +163,30 @@ async function loadDevices(gid) {
 
 async function bootstrap() {
   const statusRes = await fetch('/api/login/status')
-  if (statusRes.ok) {
-    const status = await statusRes.json()
-    if (status.state === 'ready') {
-      showDashboard(status.user)
-      await loadHomes()
-      return
-    }
+  if (!statusRes.ok) {
+    showLogin()
+    loginStatus.textContent = 'Faça login — clique em «Atualizar QR»'
+    return
+  }
+  const status = await statusRes.json()
+  if (status.state === 'ready' && status.user) {
+    location.href = '/wall.html'
+    return
+  }
+  if (status.state === 'pending') {
+    showLogin()
+    regionBadge.textContent = (status.region || 'us').toUpperCase()
+    if (status.qrImage) showQR(status.qrImage)
+    else await startLogin()
+    startPolling()
+    return
+  }
+  if (status.state === 'expired' || status.state === 'error') {
+    showLogin()
+    loginStatus.textContent = status.error || 'Sessão expirada — escaneie um novo QR'
+    return
   }
   showLogin()
-  startLogin()
 }
 
 bootstrap()

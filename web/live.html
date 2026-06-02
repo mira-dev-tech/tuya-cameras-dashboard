@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mira Cameras — Painel ao vivo</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/site.css" rel="stylesheet">
+  <style>
+    body { background: #0b1220; color: #e2e8f0; min-height: 100vh; display: flex; flex-direction: column; }
+    .sidebar { background: #111827; border-right: 1px solid #334155; max-height: calc(100vh - 56px - 32px); overflow-y: auto; }
+    .player-wrap { background: #000; min-height: calc(100vh - 56px - 32px); position: relative; }
+    #portalFrame { width: 100%; height: calc(100vh - 56px - 32px); border: 0; background: #000; }
+    .home-group { border-bottom: 1px solid #1f2937; }
+    .cam-item { cursor: pointer; border-left: 3px solid transparent; }
+    .cam-item:hover, .cam-item.active { background: #1e293b; border-left-color: #f97316; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .status-live { background: #22c55e; }
+    .status-warn { background: #eab308; }
+    .status-off { background: #64748b; }
+    .toolbar { background: #111827; border-bottom: 1px solid #334155; }
+    .muted { color: #94a3b8; }
+    .badge-count { background: #334155; }
+    .activity-log { max-height: 140px; overflow-y: auto; font-family: ui-monospace, monospace; font-size: 0.72rem; line-height: 1.35; }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-dark toolbar px-3">
+    <a class="navbar-brand" href="/">Mira Cameras</a>
+    <a href="/wall.html" class="btn btn-warning btn-sm me-2">Mural</a>
+    <span class="badge badge-count me-2" id="camCount">0 câmeras</span>
+    <span class="small muted me-auto" id="watchStatus">Monitorando…</span>
+    <div class="form-check form-switch me-3 mb-0">
+      <input class="form-check-input" type="checkbox" id="autoRotate" checked>
+      <label class="form-check-label small" for="autoRotate">Rotacionar casas</label>
+    </div>
+    <button type="button" class="btn btn-outline-warning btn-sm me-2" id="reconnectBtn">Reconectar</button>
+    <button type="button" class="btn btn-outline-light btn-sm" id="fullscreenBtn">Tela cheia</button>
+    <a href="https://github.com/Rbertolli/mira-cameras" class="btn btn-outline-secondary btn-sm btn-github ms-2" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+    <button type="button" class="btn btn-outline-danger btn-sm ms-2" id="logoutBtn">Sair</button>
+  </nav>
+
+  <div class="container-fluid g-0 flex-grow-1">
+    <div class="row g-0">
+      <aside class="col-lg-3 col-xl-2 sidebar p-3">
+        <h2 class="h6 text-uppercase muted mb-3">Suas câmeras</h2>
+        <div id="cameraTree" class="small">Carregando…</div>
+        <hr class="border-secondary">
+        <h3 class="h6 text-uppercase muted mb-2">Actividade</h3>
+        <div id="activityLog" class="small muted activity-log mb-3">—</div>
+        <p class="muted small mb-0">
+          O painel IPC exibe até <strong>4 câmeras</strong> por casa (grade 2×2).
+          Use a barra lateral do player ou ative <em>Rotacionar casas</em> para ver todas.
+        </p>
+      </aside>
+      <main class="col-lg-9 col-xl-10 player-wrap p-0">
+        <iframe id="portalFrame" title="IPC Terminal ao vivo" src="about:blank"></iframe>
+      </main>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <span>Built by <a href="https://mira-dev.tech" target="_blank" rel="noopener noreferrer">Mirá Dev</a></span>
+    <span aria-hidden="true">·</span>
+    <a href="https://github.com/Rbertolli/mira-cameras" target="_blank" rel="noopener noreferrer">Source</a>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/live.js"></script>
+</body>
+</html>

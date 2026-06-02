@@ -11,7 +11,7 @@ die() { echo "Erro: $*" >&2; exit 1; }
 info() { echo ">> $*"; }
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SSH_HOST="${MIRA_CAMERAS_SSH_HOST:-komputera01}"
+SSH_HOST="${MIRA_CAMERAS_SSH_HOST:?Set MIRA_CAMERAS_SSH_HOST to your Kubernetes build node (SSH alias or user@host)}"
 TAG="${1:-1.0.0}"
 IMAGE="mira-cameras:${TAG}"
 REMOTE_DIR="/home/ubuntu/mira-cameras-build"
@@ -52,5 +52,5 @@ REMOTE
 
 info "Concluído: ${IMAGE}"
 echo ""
-echo "  DNS: cameras.mira-dev.tech → A 144.217.79.138 (Cloudflare proxied OK)"
+echo "  Demo: https://cameras.mira-dev.tech"
 echo "  curl -sS https://cameras.mira-dev.tech/healthz"

@@ -13,15 +13,19 @@ import (
 	"github.com/Rbertolli/mira-cameras/internal/tuya"
 )
 
-const sessionCookie = "mira_cam_sid"
+const (
+	sessionCookie   = "mira_cam_sid"
+	sessionMaxAge   = 30 * 24 * 60 * 60 // 30 days — invalidação real vem do upstream Tuya
+	authRecheckTTL  = 5 * time.Minute
+)
 
 // Server exposes REST endpoints and serves the UI.
 type Server struct {
-	store *store.MemoryStore
+	store store.Store
 }
 
 // NewServer creates the HTTP API layer.
-func NewServer(st *store.MemoryStore) *Server {
+func NewServer(st store.Store) *Server {
 	return &Server{store: st}
 }
 
@@ -34,7 +38,14 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/homes", s.handleHomes)
 	mux.HandleFunc("GET /api/devices", s.handleDevices)
+	mux.HandleFunc("GET /api/cameras/all", s.handleAllCameras)
 	mux.HandleFunc("GET /api/me", s.handleMe)
+	mux.Handle("/portal/", http.HandlerFunc(s.handlePortalProxy))
+	mux.HandleFunc("GET /portal", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/portal/playback", http.StatusTemporaryRedirect)
+	})
+	mux.HandleFunc("/api/", s.handleUpstreamAPI)
+	mux.HandleFunc("/global/", s.handleUpstreamGlobal)
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
@@ -111,7 +122,7 @@ func (s *Server) handleLoginStart(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		MaxAge:   int((24 * time.Hour).Seconds()),
+		MaxAge:   sessionMaxAge,
 	})
 
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -128,16 +139,26 @@ func (s *Server) handleLoginStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "session", "sessão inválida ou expirada")
 		return
 	}
+	if sess.State == store.StateReady && !s.ensureAuth(sess) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"state":  sess.State,
+			"region": sess.Region,
+			"error":  sess.Error,
+		})
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"state":  sess.State,
-		"region": sess.Region,
-		"error":  sess.Error,
-		"user":   sess.User,
+		"state":   sess.State,
+		"region":  sess.Region,
+		"error":   sess.Error,
+		"user":    sess.User,
+		"qrImage": sess.QRImage,
 	})
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if ck, err := r.Cookie(sessionCookie); err == nil {
+		invalidatePortalProxy(ck.Value)
 		s.store.Delete(ck.Value)
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1})
@@ -168,6 +189,32 @@ func (s *Server) handleHomes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"homes": homes})
+}
+
+func (s *Server) handleAllCameras(w http.ResponseWriter, r *http.Request) {
+	sess, ok := s.requireReady(w, r)
+	if !ok {
+		return
+	}
+	includeOffline := r.URL.Query().Get("all") == "1"
+	var (
+		cameras []tuya.CameraEntry
+		err     error
+	)
+	if includeOffline {
+		cameras, err = sess.Client.AllCameras()
+	} else {
+		cameras, err = sess.Client.AllOnlineCameras()
+	}
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "cameras_all", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"count":   len(cameras),
+		"online":  !includeOffline,
+		"cameras": cameras,
+	})
 }
 
 func (s *Server) handleDevices(w http.ResponseWriter, r *http.Request) {
@@ -216,7 +263,34 @@ func (s *Server) requireReady(w http.ResponseWriter, r *http.Request) (*store.Se
 		writeError(w, http.StatusUnauthorized, "login", "faça login via QR code primeiro")
 		return nil, false
 	}
+	if !s.ensureAuth(sess) {
+		writeError(w, http.StatusUnauthorized, "login", sess.Error)
+		return nil, false
+	}
 	return sess, true
+}
+
+func (s *Server) ensureAuth(sess *store.Session) bool {
+	if sess.State != store.StateReady || sess.Client == nil {
+		return false
+	}
+	if time.Since(sess.AuthCheckedAt) < authRecheckTTL {
+		return true
+	}
+	user, err := sess.Client.UserInfo()
+	if err != nil {
+		sess.State = store.StateExpired
+		if sess.Error == "" {
+			sess.Error = "Sessão expirada — faça login novamente"
+		}
+		s.store.Put(sess)
+		invalidatePortalProxy(sess.ID)
+		return false
+	}
+	sess.User = user
+	sess.AuthCheckedAt = time.Now()
+	s.store.Put(sess)
+	return true
 }
 
 func (s *Server) sessionFromRequest(r *http.Request) (*store.Session, bool) {
@@ -238,7 +312,7 @@ func (s *Server) pollLogin(sessionID string) {
 		if !ok {
 			return
 		}
-		okLogin, err := sess.Client.PollLogin(sess.QRToken)
+		poll, err := sess.Client.PollLogin(sess.QRToken)
 		sess.UpdatedAt = time.Now()
 		if err != nil {
 			sess.State = store.StateError
@@ -246,13 +320,17 @@ func (s *Server) pollLogin(sessionID string) {
 			s.store.Put(sess)
 			return
 		}
-		if okLogin {
+		if poll != nil {
 			user, uerr := sess.Client.UserInfo()
 			if uerr != nil {
-				log.Printf("user info after login: %v", uerr)
+				log.Printf("poll ok mas user info falhou: %v", uerr)
+				s.store.Put(sess)
+				time.Sleep(3 * time.Second)
+				continue
 			}
 			sess.State = store.StateReady
 			sess.User = user
+			sess.AuthCheckedAt = time.Now()
 			s.store.Put(sess)
 			return
 		}
