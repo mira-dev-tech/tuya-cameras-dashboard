@@ -47,9 +47,24 @@ The loading screen estimates wait time from the **actual camera count** returned
 |-----|---------|
 | `/` | QR login + device browser |
 | `/wall.html` | Multi-camera live wall (primary UI) |
+| `/tv.html` or `/tv` | Smart TV entry — redirects to TV-optimized wall |
 | `/live.html` | Single IPC player with sidebar and auto-reconnect |
 
-## Architecture
+## Smart TV (browser)
+
+Open the mural directly on your LG webOS, Samsung Tizen, or other Smart TV browser:
+
+| Step | Detail |
+|------|--------|
+| **URL** | [https://cameras.mira-dev.tech/tv.html](https://cameras.mira-dev.tech/tv.html) (or `/wall.html?tv=1`) |
+| **Login** | Scan the QR code **in the TV browser** — the session cookie is not shared with your phone or PC |
+| **Grid** | TV mode defaults to a **2×2** grid (4 streams); with more cameras, pages rotate every **20 seconds** |
+| **Memory** | Only visible-page cameras keep active WebRTC iframes — hidden pages are torn down to save RAM |
+| **Screensaver** | The app tries Wake Lock, webOS Luna, and Tizen APIs when available; if the TV still sleeps, disable the screensaver in **Settings → General → Screen Saver** (LG) |
+| **Remote** | **Refresh** (↻) is focusable via D-pad; **Back** shows a hint to use the TV Home button |
+
+For 24/7 kiosk use, a dedicated HDMI stick (Fire TV, Chromecast, Raspberry Pi) with a kiosk browser is more reliable than the built-in TV browser.
+
 
 ```text
 Browser

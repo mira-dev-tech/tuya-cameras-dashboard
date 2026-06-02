@@ -30,9 +30,11 @@ let connectCurrent = 0
 let connectTotal = 0
 
 const STAGGER_MS = 3000
+const TV_STAGGER_MS = 1500
 const PORTAL_BOOT_MS = 10000
 const PARALLEL = 1
 const PAGE_ROTATE_MS = 30000
+const TV_PAGE_ROTATE_MS = 20000
 const WATCH_MS = 8000
 const STALE_MS = 60000
 const ERR_RETRY_MS = 30000
@@ -40,14 +42,30 @@ const MAX_RECONNECT_ATTEMPTS = 8
 const LAYOUT_STORAGE_KEY = 'mira_wall_layout'
 const VALID_PRESETS = new Set(['2', '4', '8', '16', 'all'])
 const TV_UA = /Web0S|webOS|Tizen|SMART-TV|SmartTV|GoogleTV|Android TV|CrKey|HbbTV/i
+const TV_BACK_KEYS = new Set([461, 10009])
 
 function isTvContext() {
   const params = new URLSearchParams(location.search)
+  if (params.get('tv') === '0') return false
   if (params.get('tv') === '1') return true
   if (TV_UA.test(navigator.userAgent || '')) return true
   const wide = window.innerWidth >= 1280
   const coarse = window.matchMedia('(hover: none) and (pointer: coarse)').matches
   return wide && coarse
+}
+
+const lazyEngines = isTvContext()
+
+function getStaggerMs() {
+  return lazyEngines ? TV_STAGGER_MS : STAGGER_MS
+}
+
+function getPageRotateMs() {
+  return lazyEngines ? TV_PAGE_ROTATE_MS : PAGE_ROTATE_MS
+}
+
+function getRotateSeconds() {
+  return Math.round(getPageRotateMs() / 1000)
 }
 
 function initTvMode() {
@@ -95,6 +113,13 @@ let reconnectBusy = false
 const reconnectPending = new Set()
 
 function loadLayoutPreset() {
+  const params = new URLSearchParams(location.search)
+  const urlLayout = params.get('layout')
+  if (urlLayout && VALID_PRESETS.has(urlLayout)) return urlLayout
+  if (isTvContext()) {
+    const vw = window.innerWidth || 1280
+    return vw > 1920 ? '8' : '4'
+  }
   const saved = localStorage.getItem(LAYOUT_STORAGE_KEY)
   return saved && VALID_PRESETS.has(saved) ? saved : 'all'
 }
@@ -185,7 +210,7 @@ function highlightLoadSlot(index) {
 }
 
 function computeLoadEtaMinutes(n) {
-  const secPerCam = (PORTAL_BOOT_MS + 12000) / 1000 + STAGGER_MS / 1000
+  const secPerCam = (PORTAL_BOOT_MS + 12000) / 1000 + getStaggerMs() / 1000
   const totalSec = n * secPerCam
   const minMin = Math.max(1, Math.floor(totalSec * 0.9 / 60))
   const maxMin = Math.max(minMin + 1, Math.ceil(totalSec * 1.2 / 60))
@@ -483,13 +508,14 @@ function updateReconnectStat() {
   const live = [...tiles.values()].filter((t) => t.mode === 'live').length
   const err = [...tiles.values()].filter((t) => t.mode === 'err').length
   const pending = reconnectPending.size + (reconnectBusy ? 1 : 0)
+  const rotSec = getRotateSeconds()
   const base = totalPages <= 1
     ? t('statusGrid', { cols: gridCols, rows: gridRows, n: cameraOrder.length })
-    : t('statusPage', { page: pageIndex + 1, pages: totalPages, visible: pageSize })
+    : t('statusPage', { page: pageIndex + 1, pages: totalPages, visible: pageSize, seconds: rotSec })
   if (err > 0 || pending > 0) {
     rotateStat.textContent = `${base} · ${t('statusLiveErr', { live, err })}${pending ? ` · ${t('statusReconnecting', { n: pending })}` : ''}`
   } else if (needsPageRotation() && pageRotateTimer) {
-    rotateStat.textContent = `${base} · ${t('statusRotation')}`
+    rotateStat.textContent = `${base} · ${t('statusRotation', { seconds: rotSec })}`
   } else {
     rotateStat.textContent = base
   }
@@ -501,6 +527,74 @@ function applyPageVisibility() {
     const page = Math.floor(i / pageSize)
     tile.root.classList.toggle('hidden-page', page !== pageIndex)
   })
+}
+
+function visibleCameraDevIds() {
+  const list = orderedTiles()
+  const start = pageIndex * pageSize
+  return list.slice(start, start + pageSize).map((tile) => tile.devId)
+}
+
+function isTileOnVisiblePage(tile) {
+  if (!lazyEngines) return true
+  const list = orderedTiles()
+  const i = list.findIndex((t) => t.devId === tile.devId)
+  if (i < 0) return false
+  return Math.floor(i / pageSize) === pageIndex
+}
+
+function tearDownTileEngine(tile) {
+  stopMirror(tile)
+  if (tile.engine) {
+    tile.engine.remove()
+    tile.engine = null
+  }
+  tile.connectGen = (tile.connectGen || 0) + 1
+  reconnectPending.delete(tile.devId)
+  if (tile.mode === 'live') {
+    setTileMode(tile, 'wait')
+  }
+}
+
+let syncEnginesBusy = false
+let syncEnginesQueued = false
+
+async function syncVisibleEngines() {
+  if (!lazyEngines) return
+  if (syncEnginesBusy) {
+    syncEnginesQueued = true
+    return
+  }
+  syncEnginesBusy = true
+  try {
+    const visibleIds = new Set(visibleCameraDevIds())
+    for (const tile of tiles.values()) {
+      if (!visibleIds.has(tile.devId) && !tile.reconnecting) {
+        tearDownTileEngine(tile)
+      }
+    }
+
+    for (const devId of visibleIds) {
+      const tile = tiles.get(devId)
+      const cam = cameraMeta.get(devId)
+      if (!tile || !cam) continue
+      if (tile.engine || tile.reconnecting) continue
+      if (tile.mode === 'live' && isStreamHealthy(tile)) continue
+
+      setTileMode(tile, 'wait')
+      await connectCamera(cam, tile, nextEngineIndex())
+      if (visibleIds.size > 1) await sleep(getStaggerMs())
+    }
+
+    updateLiveStat()
+    updateReconnectStat()
+  } finally {
+    syncEnginesBusy = false
+    if (syncEnginesQueued) {
+      syncEnginesQueued = false
+      void syncVisibleEngines()
+    }
+  }
 }
 
 function recalcLayout(options = {}) {
@@ -520,6 +614,10 @@ function recalcLayout(options = {}) {
   document.documentElement.style.setProperty('--wall-rows', String(rows))
 
   syncPageRotation(options.restartRotation === true)
+
+  if (lazyEngines && cameraOrder.length && wallLoading?.classList.contains('hidden')) {
+    void syncVisibleEngines()
+  }
 }
 
 function needsPageRotation() {
@@ -530,6 +628,10 @@ function needsPageRotation() {
 function syncPageRotation(forceRestart = false) {
   applyPageVisibility()
   updateRotateStat()
+
+  if (wallLoading && !wallLoading.classList.contains('hidden')) {
+    return
+  }
 
   if (!needsPageRotation()) {
     stopPageRotate()
@@ -548,7 +650,8 @@ function startPageRotate() {
     pageIndex = (pageIndex + 1) % totalPages
     applyPageVisibility()
     updateRotateStat()
-  }, PAGE_ROTATE_MS)
+    if (lazyEngines) void syncVisibleEngines()
+  }, getPageRotateMs())
 }
 
 function stopPageRotate() {
@@ -566,6 +669,8 @@ function startMirror(tile, sourceVideo) {
   if (tile.engine) mutePortalVideos(engineDoc(tile.engine))
 
   let muteTick = 0
+  let frameTick = 0
+  const frameSkip = lazyEngines ? 3 : 1
   const draw = () => {
     const v = tile.sourceVideo
     if (v && v.readyState >= 2 && v.videoWidth > 0) {
@@ -573,7 +678,9 @@ function startMirror(tile, sourceVideo) {
         tile.canvas.width = v.videoWidth
         tile.canvas.height = v.videoHeight
       }
-      tile.canvas.getContext('2d')?.drawImage(v, 0, 0)
+      if (frameTick++ % frameSkip === 0) {
+        tile.canvas.getContext('2d')?.drawImage(v, 0, 0)
+      }
       tile.lastFrameAt = Date.now()
       if (tile.mode !== 'live') {
         setTileMode(tile, 'live')
@@ -666,6 +773,7 @@ function createTile(cam, sortIndex) {
     lastRetryAt: 0,
     reconnectAttempts: 0,
     reconnecting: false,
+    connectGen: 0,
   }
   tiles.set(cam.devId, state)
   return state
@@ -700,6 +808,13 @@ function updateLiveStat() {
 }
 
 async function connectCamera(cam, tile, engineIndex) {
+  const connectGen = (tile.connectGen || 0) + 1
+  tile.connectGen = connectGen
+
+  function connectAborted() {
+    return lazyEngines && (tile.connectGen !== connectGen || !isTileOnVisiblePage(tile))
+  }
+
   if (tile.engine) {
     stopMirror(tile)
     tile.engine.remove()
@@ -717,15 +832,29 @@ async function connectCamera(cam, tile, engineIndex) {
 
   engine.src = `/portal/playback?_=${Date.now()}`
   const ready = await waitPortal(engine)
+  if (connectAborted()) {
+    tearDownTileEngine(tile)
+    return false
+  }
   if (!ready) {
     failTile(tile)
     return false
   }
 
   await sleep(PORTAL_BOOT_MS)
+  if (connectAborted()) {
+    tearDownTileEngine(tile)
+    return false
+  }
+
   let doc = engineDoc(engine)
   selectHomeInPortal(doc, cam.homeName)
   await sleep(1200)
+  if (connectAborted()) {
+    tearDownTileEngine(tile)
+    return false
+  }
+
   const loaded = await waitHomeTreeLoaded(doc, cam.homeName)
   const homeTree = loaded.tree
 
@@ -736,6 +865,11 @@ async function connectCamera(cam, tile, engineIndex) {
 
   homeTree.scrollIntoView({ block: 'center', behavior: 'instant' })
   await sleep(1000)
+  if (connectAborted()) {
+    tearDownTileEngine(tile)
+    return false
+  }
+
   const visible = await ensureDeviceVisible(homeTree, cam.name)
 
   if (!visible) {
@@ -752,9 +886,18 @@ async function connectCamera(cam, tile, engineIndex) {
 
   doc = engineDoc(engine)
   let ok = await waitVideo(doc, cam.devId, cam.name, 35000)
+  if (connectAborted()) {
+    tearDownTileEngine(tile)
+    return false
+  }
   if (!ok) {
     clickCameraInTree(homeTree, cam.name)
     ok = await waitVideo(engineDoc(engine), cam.devId, cam.name, 15000)
+  }
+
+  if (connectAborted()) {
+    tearDownTileEngine(tile)
+    return false
   }
 
   doc = engineDoc(engine)
@@ -791,6 +934,7 @@ function enqueueReconnect(devId) {
   const tile = tiles.get(devId)
   if (!tile || tile.reconnecting || reconnectPending.has(devId)) return
   if (tile.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) return
+  if (lazyEngines && !isTileOnVisiblePage(tile)) return
   reconnectPending.add(devId)
   void processReconnectQueue()
 }
@@ -845,6 +989,7 @@ function watchTiles() {
   const now = Date.now()
   for (const tile of tiles.values()) {
     if (tile.reconnecting) continue
+    if (lazyEngines && !isTileOnVisiblePage(tile)) continue
 
     if (tile.mode === 'live') {
       const noFrames = tile.lastFrameAt > 0 && now - tile.lastFrameAt > STALE_MS
@@ -885,6 +1030,75 @@ async function bootstrap(force = false) {
     showWallError(msg)
   }
 }
+
+async function connectCamerasBatch(devIds) {
+  let live = 0
+  let idx = 0
+  for (const devId of devIds) {
+    const cam = cameraMeta.get(devId)
+    const tile = tiles.get(devId)
+    if (!cam || !tile) continue
+    connectCurrent = idx + 1
+    connectTotal = devIds.length
+    updateProgress(live, devIds.length)
+    setTileMode(tile, 'wait')
+    const ok = await connectCamera(cam, tile, nextEngineIndex())
+    if (ok) live += 1
+    updateProgress(live, devIds.length)
+    updateLiveStat()
+    idx += 1
+    if (idx < devIds.length) await sleep(getStaggerMs())
+  }
+  return live
+}
+
+function initTvRemote() {
+  if (!lazyEngines) return
+
+  refreshBtn?.setAttribute('tabindex', '0')
+  totalStat?.setAttribute('tabindex', '0')
+  liveStat?.setAttribute('tabindex', '0')
+  rotateStat?.setAttribute('tabindex', '0')
+
+  document.addEventListener('keydown', (e) => {
+    const code = e.keyCode || e.which
+    if (TV_BACK_KEYS.has(code)) {
+      e.preventDefault()
+      if (rotateStat) {
+        const prev = rotateStat.textContent
+        rotateStat.textContent = t('tvBackHint')
+        setTimeout(() => {
+          if (rotateStat.textContent === t('tvBackHint')) updateReconnectStat()
+        }, 2500)
+      }
+      return
+    }
+    if (e.key === 'Enter' && document.activeElement === refreshBtn) {
+      e.preventDefault()
+      bootstrap(true)
+    }
+  })
+
+  setTimeout(() => refreshBtn?.focus(), 300)
+}
+
+function initTvPlatform() {
+  if (!lazyEngines || !window.MiraTvPlatform) return
+  void window.MiraTvPlatform.keepScreenAwake()
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (lazyEngines) {
+      for (const tile of tiles.values()) {
+        if (!isTileOnVisiblePage(tile)) tearDownTileEngine(tile)
+      }
+    }
+    return
+  }
+  if (lazyEngines) void syncVisibleEngines()
+  initTvPlatform()
+})
 
 async function bootstrapInner(force = false) {
   showLoading()
@@ -953,42 +1167,51 @@ async function bootstrapInner(force = false) {
   cameras.forEach((c) => cameraMeta.set(c.devId, c))
 
   totalStat.textContent = t('onlineCount', { n: cameras.length })
-  connectTotal = cameras.length
   connectCurrent = 0
-  updateLoadEta(cameras.length)
   if (loadConnecting) loadConnecting.textContent = ''
 
   syncTiles(cameras)
   recalcLayout()
+
+  const visibleIds = lazyEngines ? visibleCameraDevIds() : cameras.map((c) => c.devId)
+  connectTotal = visibleIds.length
+  updateLoadEta(connectTotal)
+
   setLoadingStep(3)
   let live = 0
-  let engineIdx = 0
 
-  for (let i = 0; i < cameras.length; i += PARALLEL) {
-    const chunk = cameras.slice(i, i + PARALLEL)
-    const results = await Promise.all(chunk.map(async (cam) => {
-      const tile = tiles.get(cam.devId)
-      if (!tile) return false
-      connectCurrent = engineIdx + 1
+  if (lazyEngines) {
+    live = await connectCamerasBatch(visibleIds)
+  } else {
+    let engineIdx = 0
+    for (let i = 0; i < cameras.length; i += PARALLEL) {
+      const chunk = cameras.slice(i, i + PARALLEL)
+      const results = await Promise.all(chunk.map(async (cam) => {
+        const tile = tiles.get(cam.devId)
+        if (!tile) return false
+        connectCurrent = engineIdx + 1
+        updateProgress(live, cameras.length)
+        setTileMode(tile, 'wait')
+        const idx = engineIdx
+        engineIdx += 1
+        return connectCamera(cam, tile, idx)
+      }))
+      live += results.filter(Boolean).length
       updateProgress(live, cameras.length)
-      setTileMode(tile, 'wait')
-      const idx = engineIdx
-      engineIdx += 1
-      return connectCamera(cam, tile, idx)
-    }))
-    live += results.filter(Boolean).length
-    updateProgress(live, cameras.length)
-    updateLiveStat()
-    if (i + PARALLEL < cameras.length) await sleep(STAGGER_MS)
+      updateLiveStat()
+      if (i + PARALLEL < cameras.length) await sleep(getStaggerMs())
+    }
   }
 
   loadSteps.forEach((el) => el?.classList.add('done'))
   hideLoading()
   recalcLayout()
   startHealthWatch()
+  initTvRemote()
+  initTvPlatform()
 
   for (const tile of tiles.values()) {
-    if (tile.mode === 'err') enqueueReconnect(tile.devId)
+    if (tile.mode === 'err' && isTileOnVisiblePage(tile)) enqueueReconnect(tile.devId)
   }
 }
 
@@ -997,6 +1220,7 @@ bootstrap()
 window.addEventListener('beforeunload', () => {
   stopPageRotate()
   stopHealthWatch()
+  window.MiraTvPlatform?.releaseScreenAwake()
   for (const tile of tiles.values()) {
     stopMirror(tile)
     tile.engine?.remove()
